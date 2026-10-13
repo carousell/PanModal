@@ -68,6 +68,12 @@ open class PanModalPresentationController: UIPresentationController {
     private var scrollViewYOffset: CGFloat = 0.0
 
     /**
+     A flag to determine if `haltScrolling` is setting the scroll view content offset,
+     so the content offset observer does not re-enter it
+     */
+    private var isHaltingScroll = false
+
+    /**
      An observer for the scroll view content offset
      */
     private var scrollObserver: NSKeyValueObservation?
@@ -761,15 +767,25 @@ private extension PanModalPresentationController {
 
     /**
      Halts the scroll of a given scroll view & anchors it at the `scrollViewYOffset`
+
+     - Note: Setting the content offset can make the scroll view adjust it again synchronously
+     (e.g. UITableView measuring self-sizing cells), which notifies the observer while we are still here.
+     Re-entering would fight that adjustment recursively until the stack overflows.
      */
     func haltScrolling(_ scrollView: UIScrollView) {
-        if scrollView.frame.isEmpty == false {
-            let maxY = max(scrollView.contentSize.height - scrollView.bounds.height, 0)
-            let point = CGPoint(x: 0, y: min(scrollViewYOffset.rounded(), maxY))
-            if presentedViewController.isPanModalPresented && point != scrollView.contentOffset {
-                scrollView.setContentOffset(point, animated: false)
-                scrollView.showsVerticalScrollIndicator = false
-            }
+        guard
+            !isHaltingScroll,
+            scrollView.frame.isEmpty == false
+            else { return }
+
+        isHaltingScroll = true
+        defer { isHaltingScroll = false }
+
+        let maxY = max(scrollView.contentSize.height - scrollView.bounds.height, 0)
+        let point = CGPoint(x: 0, y: min(scrollViewYOffset.rounded(), maxY))
+        if presentedViewController.isPanModalPresented && point != scrollView.contentOffset {
+            scrollView.setContentOffset(point, animated: false)
+            scrollView.showsVerticalScrollIndicator = false
         }
     }
 
